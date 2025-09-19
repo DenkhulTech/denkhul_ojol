@@ -103,7 +103,32 @@ defmodule OjolMvp.Accounts do
   end
 
   def update_user_location(user_id, latitude, longitude) do
-  user = get_user!(user_id)
-  update_user(user, %{latitude: latitude, longitude: longitude})
-end
+    user = get_user!(user_id)
+    update_user(user, %{latitude: latitude, longitude: longitude})
+  end
+
+  def authenticate_user(phone, password) do
+    case get_user_by_phone(phone) do
+      nil ->
+        {:error, :invalid_credentials}
+
+      user ->
+        if Argon2.verify_pass(password, user.password_hash) do
+          {:ok, user}
+        else
+          {:error, :invalid_credentials}
+        end
+    end
+  end
+
+  def get_user_by_phone(phone) do
+    Repo.get_by(User, phone: phone)
+  end
+
+  def get_user(id) do
+    case Repo.get(User, id) do
+      nil -> {:error, :not_found}
+      user -> {:ok, user}
+    end
+  end
 end

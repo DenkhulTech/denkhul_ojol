@@ -67,8 +67,13 @@ defmodule OjolMvp.MixProject do
       {:dns_cluster, "~> 0.2.0"},
       {:bandit, "~> 1.5"},
       {:guardian, "~> 2.3"},
-     {:bcrypt_elixir, "~> 3.0", hex: :bcrypt_elixir, runtime: true},
-    {:cors_plug, "~> 3.0"}
+      {:argon2_elixir, "~> 3.0"},
+      {:cors_plug, "~> 3.0"},
+      {:hammer, "~> 6.1"},
+      {:httpoison, "~> 2.0"},
+      {:open_api_spex, "~> 3.5"},
+      {:phoenix_swagger, "~> 0.8"},
+       {:corsica, "~> 2.1"}
     ]
   end
 

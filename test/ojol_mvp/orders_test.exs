@@ -8,7 +8,18 @@ defmodule OjolMvp.OrdersTest do
 
     import OjolMvp.OrdersFixtures
 
-    @invalid_attrs %{status: nil, pickup_address: nil, pickup_lat: nil, pickup_lng: nil, destination_address: nil, destination_lat: nil, destination_lng: nil, distance_km: nil, price: nil, notes: nil}
+    @invalid_attrs %{
+      status: nil,
+      pickup_address: nil,
+      pickup_lat: nil,
+      pickup_lng: nil,
+      destination_address: nil,
+      destination_lat: nil,
+      destination_lng: nil,
+      distance_km: nil,
+      price: nil,
+      notes: nil
+    }
 
     test "list_orders/0 returns all orders" do
       order = order_fixture()
@@ -21,7 +32,18 @@ defmodule OjolMvp.OrdersTest do
     end
 
     test "create_order/1 with valid data creates a order" do
-      valid_attrs = %{status: "some status", pickup_address: "some pickup_address", pickup_lat: "120.5", pickup_lng: "120.5", destination_address: "some destination_address", destination_lat: "120.5", destination_lng: "120.5", distance_km: "120.5", price: 42, notes: "some notes"}
+      valid_attrs = %{
+        status: "some status",
+        pickup_address: "some pickup_address",
+        pickup_lat: "120.5",
+        pickup_lng: "120.5",
+        destination_address: "some destination_address",
+        destination_lat: "120.5",
+        destination_lng: "120.5",
+        distance_km: "120.5",
+        price: 42,
+        notes: "some notes"
+      }
 
       assert {:ok, %Order{} = order} = Orders.create_order(valid_attrs)
       assert order.status == "some status"
@@ -42,7 +64,19 @@ defmodule OjolMvp.OrdersTest do
 
     test "update_order/2 with valid data updates the order" do
       order = order_fixture()
-      update_attrs = %{status: "some updated status", pickup_address: "some updated pickup_address", pickup_lat: "456.7", pickup_lng: "456.7", destination_address: "some updated destination_address", destination_lat: "456.7", destination_lng: "456.7", distance_km: "456.7", price: 43, notes: "some updated notes"}
+
+      update_attrs = %{
+        status: "some updated status",
+        pickup_address: "some updated pickup_address",
+        pickup_lat: "456.7",
+        pickup_lng: "456.7",
+        destination_address: "some updated destination_address",
+        destination_lat: "456.7",
+        destination_lng: "456.7",
+        distance_km: "456.7",
+        price: 43,
+        notes: "some updated notes"
+      }
 
       assert {:ok, %Order{} = order} = Orders.update_order(order, update_attrs)
       assert order.status == "some updated status"

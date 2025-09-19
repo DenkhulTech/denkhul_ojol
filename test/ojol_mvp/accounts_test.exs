@@ -8,7 +8,16 @@ defmodule OjolMvp.AccountsTest do
 
     import OjolMvp.AccountsFixtures
 
-    @invalid_attrs %{name: nil, type: nil, phone: nil, latitude: nil, longitude: nil, is_available: nil, average_rating: nil, total_ratings: nil}
+    @invalid_attrs %{
+      name: nil,
+      type: nil,
+      phone: nil,
+      latitude: nil,
+      longitude: nil,
+      is_available: nil,
+      average_rating: nil,
+      total_ratings: nil
+    }
 
     test "list_users/0 returns all users" do
       user = user_fixture()
@@ -21,7 +30,16 @@ defmodule OjolMvp.AccountsTest do
     end
 
     test "create_user/1 with valid data creates a user" do
-      valid_attrs = %{name: "some name", type: "some type", phone: "some phone", latitude: "120.5", longitude: "120.5", is_available: true, average_rating: "120.5", total_ratings: 42}
+      valid_attrs = %{
+        name: "some name",
+        type: "some type",
+        phone: "some phone",
+        latitude: "120.5",
+        longitude: "120.5",
+        is_available: true,
+        average_rating: "120.5",
+        total_ratings: 42
+      }
 
       assert {:ok, %User{} = user} = Accounts.create_user(valid_attrs)
       assert user.name == "some name"
@@ -40,7 +58,17 @@ defmodule OjolMvp.AccountsTest do
 
     test "update_user/2 with valid data updates the user" do
       user = user_fixture()
-      update_attrs = %{name: "some updated name", type: "some updated type", phone: "some updated phone", latitude: "456.7", longitude: "456.7", is_available: false, average_rating: "456.7", total_ratings: 43}
+
+      update_attrs = %{
+        name: "some updated name",
+        type: "some updated type",
+        phone: "some updated phone",
+        latitude: "456.7",
+        longitude: "456.7",
+        is_available: false,
+        average_rating: "456.7",
+        total_ratings: 43
+      }
 
       assert {:ok, %User{} = user} = Accounts.update_user(user, update_attrs)
       assert user.name == "some updated name"

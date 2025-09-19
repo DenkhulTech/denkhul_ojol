@@ -24,7 +24,16 @@ defmodule OjolMvpWeb.UserControllerTest do
     average_rating: "456.7",
     total_ratings: 43
   }
-  @invalid_attrs %{name: nil, type: nil, phone: nil, latitude: nil, longitude: nil, is_available: nil, average_rating: nil, total_ratings: nil}
+  @invalid_attrs %{
+    name: nil,
+    type: nil,
+    phone: nil,
+    latitude: nil,
+    longitude: nil,
+    is_available: nil,
+    average_rating: nil,
+    total_ratings: nil
+  }
 
   setup %{conn: conn} do
     {:ok, conn: put_req_header(conn, "accept", "application/json")}

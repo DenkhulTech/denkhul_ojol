@@ -28,7 +28,18 @@ defmodule OjolMvpWeb.OrderControllerTest do
     price: 43,
     notes: "some updated notes"
   }
-  @invalid_attrs %{status: nil, pickup_address: nil, pickup_lat: nil, pickup_lng: nil, destination_address: nil, destination_lat: nil, destination_lng: nil, distance_km: nil, price: nil, notes: nil}
+  @invalid_attrs %{
+    status: nil,
+    pickup_address: nil,
+    pickup_lat: nil,
+    pickup_lng: nil,
+    destination_address: nil,
+    destination_lat: nil,
+    destination_lng: nil,
+    distance_km: nil,
+    price: nil,
+    notes: nil
+  }
 
   setup %{conn: conn} do
     {:ok, conn: put_req_header(conn, "accept", "application/json")}

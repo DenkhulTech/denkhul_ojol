@@ -3,19 +3,37 @@ defmodule OjolMvpWeb.OrderChannel do
 
   @impl true
   def join("order:" <> order_id, _payload, socket) do
-    case authorize_order_access(socket.assigns.user_id, order_id) do
+    case authorize_order_access(socket.assigns.user, order_id) do
       :ok -> {:ok, socket}
       :error -> {:error, %{reason: "unauthorized"}}
     end
   end
 
+  defp authorize_order_access(user, order_id) do
+    case OjolMvp.Orders.get_order!(order_id) do
+      nil ->
+        :error
+
+      order ->
+        # Only customer or assigned driver can join order channel
+        if user.id == order.customer_id or user.id == order.driver_id do
+          :ok
+        else
+          :error
+        end
+    end
+  end
+
   @impl true
+  @spec handle_in(<<_::120, _::_*32>>, map(), Phoenix.Socket.t()) ::
+          {:noreply, Phoenix.Socket.t()}
   def handle_in("order_status_update", %{"status" => status}, socket) do
     # Broadcast status update to all subscribers
     broadcast(socket, "status_changed", %{
       status: status,
       timestamp: DateTime.utc_now()
     })
+
     {:noreply, socket}
   end
 
@@ -27,6 +45,7 @@ defmodule OjolMvpWeb.OrderChannel do
       longitude: lng,
       timestamp: DateTime.utc_now()
     })
+
     {:noreply, socket}
   end
 
@@ -43,8 +62,4 @@ defmodule OjolMvpWeb.OrderChannel do
     })
   end
 
-  defp authorize_order_access(_user_id, _order_id) do
-    # Simplified authorization - in production add proper checks
-    :ok
-  end
 end

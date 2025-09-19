@@ -35,7 +35,12 @@ defmodule OjolMvp.ReviewsTest do
 
     test "update_rating/2 with valid data updates the rating" do
       rating = rating_fixture()
-      update_attrs = %{comment: "some updated comment", rating: 43, reviewer_type: "some updated reviewer_type"}
+
+      update_attrs = %{
+        comment: "some updated comment",
+        rating: 43,
+        reviewer_type: "some updated reviewer_type"
+      }
 
       assert {:ok, %Rating{} = rating} = Reviews.update_rating(rating, update_attrs)
       assert rating.comment == "some updated comment"

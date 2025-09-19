@@ -18,6 +18,7 @@ defmodule OjolMvpWeb.Endpoint do
   socket "/socket", OjolMvpWeb.UserSocket,
     websocket: true,
     longpoll: false
+
   # Serve at "/" the static files from "priv/static" directory.
   #
   # When code reloading is disabled (e.g., in production),
@@ -37,6 +38,11 @@ defmodule OjolMvpWeb.Endpoint do
     plug Phoenix.CodeReloader
     plug Phoenix.Ecto.CheckRepoStatus, otp_app: :ojol_mvp
   end
+
+  plug Corsica,
+    origins: "*",
+    allow_headers: ~w(Accept Content-Type Authorization),
+    allow_methods: ~w(GET POST PUT PATCH DELETE OPTIONS)
 
   plug Phoenix.LiveDashboard.RequestLogger,
     param_key: "request_logger",

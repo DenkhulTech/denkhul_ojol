@@ -39,15 +39,6 @@ defmodule OjolMvp.Orders do
 
   @doc """
   Creates a order.
-
-  ## Examples
-
-      iex> create_order(%{field: value})
-      {:ok, %Order{}}
-
-      iex> create_order(%{field: bad_value})
-      {:error, %Ecto.Changeset{}}
-
   """
   def create_order(attrs) do
     %Order{}
@@ -57,15 +48,6 @@ defmodule OjolMvp.Orders do
 
   @doc """
   Updates a order.
-
-  ## Examples
-
-      iex> update_order(order, %{field: new_value})
-      {:ok, %Order{}}
-
-      iex> update_order(order, %{field: bad_value})
-      {:error, %Ecto.Changeset{}}
-
   """
   def update_order(%Order{} = order, attrs) do
     order
@@ -75,15 +57,6 @@ defmodule OjolMvp.Orders do
 
   @doc """
   Deletes a order.
-
-  ## Examples
-
-      iex> delete_order(order)
-      {:ok, %Order{}}
-
-      iex> delete_order(order)
-      {:error, %Ecto.Changeset{}}
-
   """
   def delete_order(%Order{} = order) do
     Repo.delete(order)
@@ -91,68 +64,124 @@ defmodule OjolMvp.Orders do
 
   @doc """
   Returns an `%Ecto.Changeset{}` for tracking order changes.
-
-  ## Examples
-
-      iex> change_order(order)
-      %Ecto.Changeset{data: %Order{}}
-
   """
   def change_order(%Order{} = order, attrs \\ %{}) do
     Order.changeset(order, attrs)
   end
+
   def list_available_orders(_driver_lat \\ nil, _driver_lng \\ nil, _radius_km \\ 10.0) do
-  from(o in Order,
-    where: o.status == "pending" and is_nil(o.driver_id),
-    order_by: [desc: o.inserted_at]
-  )
-  |> Repo.all()
-end
-
-def accept_order(order_id, driver_id) do
-  order = get_order!(order_id)
-
-  if order.status == "pending" and is_nil(order.driver_id) do
-    update_order(order, %{driver_id: driver_id, status: "accepted"})
-  else
-    {:error, "Order not available"}
+    from(o in Order,
+      where: o.status == "pending" and is_nil(o.driver_id),
+      order_by: [desc: o.inserted_at]
+    )
+    |> Repo.all()
   end
-end
 
-def start_trip(order_id) do
-  order = get_order!(order_id)
+  def accept_order(order_id, driver_id) do
+    order = get_order!(order_id)
 
-  if order.status == "accepted" do
-    update_order(order, %{status: "in_progress"})
-  else
-    {:error, "Order not ready to start"}
+    if order.status == "pending" and is_nil(order.driver_id) do
+      update_order(order, %{driver_id: driver_id, status: "accepted"})
+    else
+      {:error, "Order not available"}
+    end
   end
-end
 
-def complete_trip(order_id) do
-  order = get_order!(order_id)
+  def start_trip(order_id) do
+    order = get_order!(order_id)
 
-  if order.status == "in_progress" do
-    update_order(order, %{status: "completed"})
-  else
-    {:error, "Order not in progress"}
+    if order.status == "accepted" do
+      update_order(order, %{status: "in_progress"})
+    else
+      {:error, "Order not ready to start"}
+    end
   end
-end
-def get_active_order_for_driver(driver_id) do
-  from(o in Order,
-    where: o.driver_id == ^driver_id and o.status in ["accepted", "in_progress"],
-    limit: 1
-  )
-  |> Repo.one()
-end
 
-def create_order_with_broadcast(order_params) do
-  case create_order(order_params) do
-    {:ok, order} ->
-      # Broadcast new order to available drivers
-      OjolMvpWeb.OrderChannel.broadcast_new_order(order)
-      {:ok, order}
-    error -> error
+  def complete_trip(order_id) do
+    order = get_order!(order_id)
+
+    if order.status == "in_progress" do
+      update_order(order, %{status: "completed"})
+    else
+      {:error, "Order not in progress"}
+    end
   end
-end
+
+  def get_active_order_for_driver(driver_id) do
+    from(o in Order,
+      where: o.driver_id == ^driver_id and o.status in ["accepted", "in_progress"],
+      limit: 1
+    )
+    |> Repo.one()
+  end
+
+  def create_order_with_broadcast(order_params) do
+    case create_order(order_params) do
+      {:ok, order} ->
+        # Broadcast new order to available drivers
+        OjolMvpWeb.OrderChannel.broadcast_new_order(order)
+        {:ok, order}
+
+      error ->
+        error
+    end
+  end
+
+  def create_order_with_smart_pricing(attrs) do
+    attrs_with_calculations =
+      attrs
+      |> calculate_distance_and_price()
+      |> add_route_information()
+
+    case create_order(attrs_with_calculations) do
+      {:ok, order} ->
+        OjolMvpWeb.OrderChannel.broadcast_new_order(order)
+        {:ok, order}
+
+      error ->
+        error
+    end
+  end
+
+  defp calculate_distance_and_price(attrs) do
+    pickup_lat = attrs["pickup_lat"] || attrs[:pickup_lat]
+    pickup_lng = attrs["pickup_lng"] || attrs[:pickup_lng]
+    dest_lat = attrs["destination_lat"] || attrs[:destination_lat]
+    dest_lng = attrs["destination_lng"] || attrs[:destination_lng]
+
+    if pickup_lat && pickup_lng && dest_lat && dest_lng do
+      distance =
+        OjolMvp.Geo.DistanceCalculator.haversine_distance(
+          pickup_lat,
+          pickup_lng,
+          dest_lat,
+          dest_lng
+        )
+
+      price = OjolMvp.Geo.DistanceCalculator.calculate_price(distance)
+
+      attrs
+      |> Map.put("distance_km", distance)
+      |> Map.put("price", price)
+    else
+      attrs
+    end
+  end
+
+  defp add_route_information(attrs) do
+    pickup_lat = attrs["pickup_lat"] || attrs[:pickup_lat]
+    pickup_lng = attrs["pickup_lng"] || attrs[:pickup_lng]
+    dest_lat = attrs["destination_lat"] || attrs[:destination_lat]
+    dest_lng = attrs["destination_lng"] || attrs[:destination_lng]
+
+    case OjolMvp.Maps.RoutingService.get_route(pickup_lat, pickup_lng, dest_lat, dest_lng) do
+      {:ok, route_info} ->
+        attrs
+        |> Map.put("estimated_duration", round(route_info.duration_min))
+        |> Map.put("route_geometry", route_info.geometry)
+
+      {:error, _} ->
+        attrs
+    end
+  end
 end

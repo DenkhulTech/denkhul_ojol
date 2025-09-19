@@ -8,12 +8,20 @@ defmodule OjolMvpWeb.UserSocket do
 
   # Socket params for authentication (simplified for now)
   @impl true
-  def connect(%{"user_id" => user_id, "user_type" => user_type}, socket, _connect_info) do
-    {:ok, assign(socket, :user_id, user_id) |> assign(:user_type, user_type)}
+  def connect(%{"user_id" => user_id, "token" => token}, socket, _connect_info) do
+    # Verify token first
+    case OjolMvp.Guardian.decode_and_verify(token) do
+      {:ok, %{"sub" => ^user_id}} ->
+        case OjolMvp.Accounts.get_user(user_id) do
+          {:ok, user} -> {:ok, assign(socket, :user, user)}
+          {:error, _} -> :error
+        end
+
+      {:error, _} ->
+        :error
+    end
   end
 
-  def connect(_params, _socket, _connect_info), do: :error
-
   @impl true
-  def id(socket), do: "user_socket:#{socket.assigns.user_id}"
+  def id(socket), do: "user_socket:#{socket.assigns.user.id}"
 end
