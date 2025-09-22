@@ -1,14 +1,16 @@
 defmodule OjolMvpWeb.OrderController do
   use OjolMvpWeb, :controller
+  require Logger
 
   alias OjolMvp.Orders
   alias OjolMvp.Orders.Order
+  alias OjolMvp.Geo.DistanceCalculator
+  alias OjolMvp.Maps.RoutingService
   alias Guardian.Plug.EnsureAuthenticated
   alias Guardian.Plug.LoadResource
 
   action_fallback OjolMvpWeb.FallbackController
 
-  # All order actions require authentication
   plug EnsureAuthenticated
   plug LoadResource
 
@@ -25,20 +27,19 @@ defmodule OjolMvpWeb.OrderController do
     else
       case validate_order_params(order_params) do
         :ok ->
-          order_params_with_customer = Map.put(order_params, "customer_id", current_user.id)
+          # Calculate distance, price, and duration
+          enhanced_params = enhance_order_params(order_params, current_user.id)
 
-          with {:ok, %Order{} = order} <- Orders.create_order(order_params_with_customer) do
+          with {:ok, %Order{} = order} <- Orders.create_order(enhanced_params) do
             IO.puts("=== Order created with status: #{order.status} ===")
 
-            # Broadcast for new order if pending
             if order.status == "pending" do
               IO.puts("=== Broadcasting new order ===")
               OjolMvpWeb.OrderChannel.broadcast_new_order(order)
               IO.puts("=== Broadcast complete ===")
             end
 
-            # Load full order with preloaded associations
-            order = Orders.get_order!(order.id) |> OjolMvp.Repo.preload([:customer, :driver])
+            order = safe_get_order_with_preload(order.id)
 
             conn
             |> put_status(:created)
@@ -65,23 +66,29 @@ defmodule OjolMvpWeb.OrderController do
 
     case parse_integer(id) do
       {:ok, order_id} ->
-        case Orders.get_order!(order_id) do
-          nil ->
+        try do
+          order = Orders.get_order!(order_id)
+          order = safe_preload(order, [:customer, :driver])
+
+          if can_view_order?(current_user, order) do
+            json(conn, %{data: format_order_response(order, current_user)})
+          else
+            conn
+            |> put_status(:forbidden)
+            |> json(%{error: "You don't have permission to view this order"})
+          end
+        rescue
+          Ecto.NoResultsError ->
             conn
             |> put_status(:not_found)
             |> json(%{error: "Order not found"})
+        catch
+          error ->
+            Logger.error("Error in show: #{inspect(error)}")
 
-          order ->
-            # Preload associations
-            order = OjolMvp.Repo.preload(order, [:customer, :driver])
-
-            if can_view_order?(current_user, order) do
-              json(conn, %{data: format_order_response(order, current_user)})
-            else
-              conn
-              |> put_status(:forbidden)
-              |> json(%{error: "You don't have permission to view this order"})
-            end
+            conn
+            |> put_status(:internal_server_error)
+            |> json(%{error: "Internal server error"})
         end
 
       :error ->
@@ -99,38 +106,46 @@ defmodule OjolMvpWeb.OrderController do
 
     case parse_integer(id) do
       {:ok, order_id} ->
-        case Orders.get_order!(order_id) do
-          nil ->
+        try do
+          order = Orders.get_order!(order_id)
+
+          case authorize_order_update(current_user, order) do
+            :ok ->
+              case validate_update_params(order_params) do
+                :ok ->
+                  with {:ok, %Order{} = updated_order} <-
+                         Orders.update_order(order, order_params) do
+                    updated_order = safe_preload(updated_order, [:customer, :driver])
+
+                    json(conn, %{
+                      data: format_order_response(updated_order, current_user),
+                      message: "Order updated successfully"
+                    })
+                  end
+
+                {:error, message} ->
+                  conn
+                  |> put_status(:bad_request)
+                  |> json(%{error: message})
+              end
+
+            {:error, message} ->
+              conn
+              |> put_status(:forbidden)
+              |> json(%{error: message})
+          end
+        rescue
+          Ecto.NoResultsError ->
             conn
             |> put_status(:not_found)
             |> json(%{error: "Order not found"})
+        catch
+          error ->
+            Logger.error("Error in update: #{inspect(error)}")
 
-          order ->
-            case authorize_order_update(current_user, order) do
-              :ok ->
-                case validate_update_params(order_params) do
-                  :ok ->
-                    with {:ok, %Order{} = updated_order} <-
-                           Orders.update_order(order, order_params) do
-                      updated_order = OjolMvp.Repo.preload(updated_order, [:customer, :driver])
-
-                      json(conn, %{
-                        data: format_order_response(updated_order, current_user),
-                        message: "Order updated successfully"
-                      })
-                    end
-
-                  {:error, message} ->
-                    conn
-                    |> put_status(:bad_request)
-                    |> json(%{error: message})
-                end
-
-              {:error, message} ->
-                conn
-                |> put_status(:forbidden)
-                |> json(%{error: message})
-            end
+            conn
+            |> put_status(:internal_server_error)
+            |> json(%{error: "Internal server error"})
         end
 
       :error ->
@@ -148,30 +163,37 @@ defmodule OjolMvpWeb.OrderController do
 
     case parse_integer(id) do
       {:ok, order_id} ->
-        case Orders.get_order!(order_id) do
-          nil ->
+        try do
+          order = Orders.get_order!(order_id)
+
+          case authorize_order_cancellation(current_user, order) do
+            :ok ->
+              with {:ok, %Order{} = _cancelled_order} <-
+                     Orders.update_order(order, %{status: "cancelled"}) do
+                if order.driver_id do
+                  notify_order_cancellation(order)
+                end
+
+                json(conn, %{message: "Order cancelled successfully"})
+              end
+
+            {:error, message} ->
+              conn
+              |> put_status(:forbidden)
+              |> json(%{error: message})
+          end
+        rescue
+          Ecto.NoResultsError ->
             conn
             |> put_status(:not_found)
             |> json(%{error: "Order not found"})
+        catch
+          error ->
+            Logger.error("Error in delete: #{inspect(error)}")
 
-          order ->
-            case authorize_order_cancellation(current_user, order) do
-              :ok ->
-                with {:ok, %Order{} = _cancelled_order} <-
-                       Orders.update_order(order, %{status: "cancelled"}) do
-                  # Notify driver if order was accepted
-                  if order.driver_id do
-                    notify_order_cancellation(order)
-                  end
-
-                  json(conn, %{message: "Order cancelled successfully"})
-                end
-
-              {:error, message} ->
-                conn
-                |> put_status(:forbidden)
-                |> json(%{error: message})
-            end
+            conn
+            |> put_status(:internal_server_error)
+            |> json(%{error: "Internal server error"})
         end
 
       :error ->
@@ -185,23 +207,32 @@ defmodule OjolMvpWeb.OrderController do
   Get current user's orders with filtering
   """
   def my_orders(conn, params) do
-    current_user = Guardian.Plug.current_resource(conn)
+    try do
+      current_user = Guardian.Plug.current_resource(conn)
 
-    {page, limit} = parse_pagination_params(params)
-    status_filter = params["status"]
+      {page, limit} = parse_pagination_params(params)
+      status_filter = params["status"]
 
-    orders = get_user_orders(current_user.id, current_user.type, page, limit, status_filter)
-    total_count = count_user_orders(current_user.id, current_user.type, status_filter)
+      orders = get_user_orders(current_user.id, current_user.type, page, limit, status_filter)
+      total_count = count_user_orders(current_user.id, current_user.type, status_filter)
 
-    json(conn, %{
-      data: Enum.map(orders, &format_order_response(&1, current_user)),
-      pagination: %{
-        page: page,
-        limit: limit,
-        total_count: total_count,
-        total_pages: ceil(total_count / limit)
-      }
-    })
+      json(conn, %{
+        data: Enum.map(orders, &format_order_response(&1, current_user)),
+        pagination: %{
+          page: page,
+          limit: limit,
+          total_count: total_count,
+          total_pages: ceil(total_count / limit)
+        }
+      })
+    catch
+      error ->
+        Logger.error("Error in my_orders: #{inspect(error)}")
+
+        conn
+        |> put_status(:internal_server_error)
+        |> json(%{error: "Internal server error"})
+    end
   end
 
   @doc """
@@ -217,20 +248,29 @@ defmodule OjolMvpWeb.OrderController do
     else
       case validate_location_params(params) do
         {:ok, driver_lat, driver_lng, radius} ->
-          {page, limit} = parse_pagination_params(params)
+          try do
+            {page, limit} = parse_pagination_params(params)
 
-          orders = get_available_orders(driver_lat, driver_lng, radius, page, limit)
-          total_count = count_available_orders(driver_lat, driver_lng, radius)
+            orders = get_available_orders(driver_lat, driver_lng, radius, page, limit)
+            total_count = count_available_orders(driver_lat, driver_lng, radius)
 
-          json(conn, %{
-            data: Enum.map(orders, &format_available_order_response/1),
-            pagination: %{
-              page: page,
-              limit: limit,
-              total_count: total_count,
-              total_pages: ceil(total_count / limit)
-            }
-          })
+            json(conn, %{
+              data: Enum.map(orders, &format_available_order_response/1),
+              pagination: %{
+                page: page,
+                limit: limit,
+                total_count: total_count,
+                total_pages: ceil(total_count / limit)
+              }
+            })
+          catch
+            error ->
+              Logger.error("Error in available_orders: #{inspect(error)}")
+
+              conn
+              |> put_status(:internal_server_error)
+              |> json(%{error: "Internal server error"})
+          end
 
         {:error, message} ->
           conn
@@ -253,28 +293,36 @@ defmodule OjolMvpWeb.OrderController do
     else
       case parse_integer(order_id) do
         {:ok, id} ->
-          case Orders.accept_order(id, current_user.id) do
-            {:ok, order} ->
-              # Broadcast status change to customer
-              OjolMvpWeb.Endpoint.broadcast("order:#{order.id}", "status_changed", %{
-                status: "accepted",
-                driver_id: current_user.id,
-                driver_name: current_user.name,
-                driver_phone: current_user.phone,
-                message: "Driver accepted your order"
-              })
+          try do
+            case safe_accept_order(id, current_user.id) do
+              {:ok, order} ->
+                safe_broadcast_status_change("order:#{order.id}", %{
+                  status: "accepted",
+                  driver_id: current_user.id,
+                  driver_name: current_user.name,
+                  driver_phone: current_user.phone,
+                  message: "Driver accepted your order"
+                })
 
-              order = Orders.get_order!(order.id) |> OjolMvp.Repo.preload([:customer, :driver])
+                order = safe_get_order_with_preload(order.id)
 
-              json(conn, %{
-                data: format_order_response(order, current_user),
-                message: "Order accepted successfully"
-              })
+                json(conn, %{
+                  data: format_order_response(order, current_user),
+                  message: "Order accepted successfully"
+                })
 
-            {:error, message} ->
+              {:error, message} ->
+                conn
+                |> put_status(:unprocessable_entity)
+                |> json(%{error: message})
+            end
+          catch
+            error ->
+              Logger.error("Error in accept: #{inspect(error)}")
+
               conn
-              |> put_status(:unprocessable_entity)
-              |> json(%{error: message})
+              |> put_status(:internal_server_error)
+              |> json(%{error: "Internal server error"})
           end
 
         :error ->
@@ -293,42 +341,48 @@ defmodule OjolMvpWeb.OrderController do
 
     case parse_integer(order_id) do
       {:ok, id} ->
-        case Orders.get_order!(id) do
-          nil ->
+        try do
+          order = Orders.get_order!(id)
+
+          case authorize_trip_action(current_user, order, "start") do
+            :ok ->
+              case safe_start_trip(id) do
+                {:ok, order} ->
+                  safe_broadcast_status_change("order:#{order.id}", %{
+                    status: "in_progress",
+                    message: "Driver has started the trip"
+                  })
+
+                  order = safe_get_order_with_preload(order.id)
+
+                  json(conn, %{
+                    data: format_order_response(order, current_user),
+                    message: "Trip started successfully"
+                  })
+
+                {:error, message} ->
+                  conn
+                  |> put_status(:unprocessable_entity)
+                  |> json(%{error: message})
+              end
+
+            {:error, message} ->
+              conn
+              |> put_status(:forbidden)
+              |> json(%{error: message})
+          end
+        rescue
+          Ecto.NoResultsError ->
             conn
             |> put_status(:not_found)
             |> json(%{error: "Order not found"})
+        catch
+          error ->
+            Logger.error("Error in start_trip: #{inspect(error)}")
 
-          order ->
-            case authorize_trip_action(current_user, order, "start") do
-              :ok ->
-                case Orders.start_trip(id) do
-                  {:ok, order} ->
-                    # Broadcast status change
-                    OjolMvpWeb.Endpoint.broadcast("order:#{order.id}", "status_changed", %{
-                      status: "in_progress",
-                      message: "Driver has started the trip"
-                    })
-
-                    order =
-                      Orders.get_order!(order.id) |> OjolMvp.Repo.preload([:customer, :driver])
-
-                    json(conn, %{
-                      data: format_order_response(order, current_user),
-                      message: "Trip started successfully"
-                    })
-
-                  {:error, message} ->
-                    conn
-                    |> put_status(:unprocessable_entity)
-                    |> json(%{error: message})
-                end
-
-              {:error, message} ->
-                conn
-                |> put_status(:forbidden)
-                |> json(%{error: message})
-            end
+            conn
+            |> put_status(:internal_server_error)
+            |> json(%{error: "Internal server error"})
         end
 
       :error ->
@@ -346,42 +400,48 @@ defmodule OjolMvpWeb.OrderController do
 
     case parse_integer(order_id) do
       {:ok, id} ->
-        case Orders.get_order!(id) do
-          nil ->
+        try do
+          order = Orders.get_order!(id)
+
+          case authorize_trip_action(current_user, order, "complete") do
+            :ok ->
+              case safe_complete_trip(id) do
+                {:ok, order} ->
+                  safe_broadcast_status_change("order:#{order.id}", %{
+                    status: "completed",
+                    message: "Trip completed successfully"
+                  })
+
+                  order = safe_get_order_with_preload(order.id)
+
+                  json(conn, %{
+                    data: format_order_response(order, current_user),
+                    message: "Trip completed successfully"
+                  })
+
+                {:error, message} ->
+                  conn
+                  |> put_status(:unprocessable_entity)
+                  |> json(%{error: message})
+              end
+
+            {:error, message} ->
+              conn
+              |> put_status(:forbidden)
+              |> json(%{error: message})
+          end
+        rescue
+          Ecto.NoResultsError ->
             conn
             |> put_status(:not_found)
             |> json(%{error: "Order not found"})
+        catch
+          error ->
+            Logger.error("Error in complete: #{inspect(error)}")
 
-          order ->
-            case authorize_trip_action(current_user, order, "complete") do
-              :ok ->
-                case Orders.complete_trip(id) do
-                  {:ok, order} ->
-                    # Broadcast completion
-                    OjolMvpWeb.Endpoint.broadcast("order:#{order.id}", "status_changed", %{
-                      status: "completed",
-                      message: "Trip completed successfully"
-                    })
-
-                    order =
-                      Orders.get_order!(order.id) |> OjolMvp.Repo.preload([:customer, :driver])
-
-                    json(conn, %{
-                      data: format_order_response(order, current_user),
-                      message: "Trip completed successfully"
-                    })
-
-                  {:error, message} ->
-                    conn
-                    |> put_status(:unprocessable_entity)
-                    |> json(%{error: message})
-                end
-
-              {:error, message} ->
-                conn
-                |> put_status(:forbidden)
-                |> json(%{error: message})
-            end
+            conn
+            |> put_status(:internal_server_error)
+            |> json(%{error: "Internal server error"})
         end
 
       :error ->
@@ -391,101 +451,195 @@ defmodule OjolMvpWeb.OrderController do
     end
   end
 
-  # Private functions
+  # Safe helper functions
+  defp safe_get_order_with_preload(order_id) do
+    try do
+      Orders.get_order!(order_id) |> safe_preload([:customer, :driver])
+    rescue
+      error ->
+        Logger.error("Error loading order: #{inspect(error)}")
+        # Return minimal order structure to prevent crash
+        %{id: order_id, status: "unknown"}
+    end
+  end
 
+  defp safe_preload(order, associations) do
+    try do
+      OjolMvp.Repo.preload(order, associations)
+    rescue
+      error ->
+        Logger.error("Error preloading: #{inspect(error)}")
+        order
+    end
+  end
+
+  defp safe_accept_order(order_id, driver_id) do
+    try do
+      Orders.accept_order(order_id, driver_id)
+    rescue
+      error ->
+        Logger.error("Error accepting order: #{inspect(error)}")
+        {:error, "Failed to accept order"}
+    end
+  end
+
+  defp safe_start_trip(order_id) do
+    try do
+      Orders.start_trip(order_id)
+    rescue
+      error ->
+        Logger.error("Error starting trip: #{inspect(error)}")
+        {:error, "Failed to start trip"}
+    end
+  end
+
+  defp safe_complete_trip(order_id) do
+    try do
+      Orders.complete_trip(order_id)
+    rescue
+      error ->
+        Logger.error("Error completing trip: #{inspect(error)}")
+        {:error, "Failed to complete trip"}
+    end
+  end
+
+  defp safe_broadcast_status_change(channel, payload) do
+    try do
+      OjolMvpWeb.Endpoint.broadcast(channel, "status_changed", payload)
+    rescue
+      error ->
+        Logger.error("Broadcast failed: #{inspect(error)}")
+        :ok
+    end
+  end
+
+  # Private query functions
   defp get_user_orders(user_id, user_type, page, limit, status_filter) do
-    import Ecto.Query
+    try do
+      import Ecto.Query
 
-    query =
-      from o in Order,
-        where:
-          (^user_type == "customer" and o.customer_id == ^user_id) or
-            (^user_type == "driver" and o.driver_id == ^user_id),
-        preload: [:customer, :driver],
-        order_by: [desc: o.inserted_at],
-        limit: ^limit,
-        offset: ^((page - 1) * limit)
+      query =
+        from o in Order,
+          where:
+            (^user_type == "customer" and o.customer_id == ^user_id) or
+              (^user_type == "driver" and o.driver_id == ^user_id),
+          preload: [:customer, :driver],
+          order_by: [desc: o.inserted_at],
+          limit: ^limit,
+          offset: ^((page - 1) * limit)
 
-    query =
-      if status_filter do
-        from o in query, where: o.status == ^status_filter
-      else
-        query
-      end
+      query =
+        if status_filter do
+          from o in query, where: o.status == ^status_filter
+        else
+          query
+        end
 
-    OjolMvp.Repo.all(query)
+      OjolMvp.Repo.all(query)
+    rescue
+      error ->
+        Logger.error("Error getting user orders: #{inspect(error)}")
+        []
+    end
   end
 
   defp count_user_orders(user_id, user_type, status_filter) do
-    import Ecto.Query
+    try do
+      import Ecto.Query
 
-    query =
-      from o in Order,
-        where:
-          (^user_type == "customer" and o.customer_id == ^user_id) or
-            (^user_type == "driver" and o.driver_id == ^user_id),
-        select: count(o.id)
+      query =
+        from o in Order,
+          where:
+            (^user_type == "customer" and o.customer_id == ^user_id) or
+              (^user_type == "driver" and o.driver_id == ^user_id),
+          select: count(o.id)
 
-    query =
-      if status_filter do
-        from o in query, where: o.status == ^status_filter
-      else
-        query
-      end
+      query =
+        if status_filter do
+          from o in query, where: o.status == ^status_filter
+        else
+          query
+        end
 
-    OjolMvp.Repo.one(query)
+      OjolMvp.Repo.one(query)
+    rescue
+      error ->
+        Logger.error("Error counting user orders: #{inspect(error)}")
+        0
+    end
   end
 
-  defp get_available_orders(driver_lat, driver_lng, _radius, page, limit) do
-    import Ecto.Query
+  defp get_available_orders(driver_lat, driver_lng, radius, page, limit) do
+    try do
+      import Ecto.Query
 
-    from(o in Order,
-      where: o.status == "pending" and is_nil(o.driver_id),
-      preload: [:customer],
-      order_by: [desc: o.inserted_at],
-      limit: ^limit,
-      offset: ^((page - 1) * limit)
-    )
-    |> OjolMvp.Repo.all()
-    |> Enum.map(fn order ->
-      Map.put(
-        order,
-        :distance_from_driver,
-        calculate_distance(driver_lat, driver_lng, order.pickup_lat, order.pickup_lng)
+      from(o in Order,
+        where: o.status == "pending" and is_nil(o.driver_id),
+        preload: [:customer],
+        order_by: [desc: o.inserted_at],
+        limit: ^limit,
+        offset: ^((page - 1) * limit)
       )
-    end)
+      |> OjolMvp.Repo.all()
+      |> Enum.map(fn order ->
+        distance =
+          case DistanceCalculator.haversine_distance(
+                 driver_lat,
+                 driver_lng,
+                 order.pickup_lat,
+                 order.pickup_lng
+               ) do
+            {:ok, dist} -> dist
+            # nilai tinggi agar di-filter out
+            {:error, _} -> 999.0
+          end
+
+        Map.put(order, :distance_from_driver, distance)
+      end)
+      |> Enum.filter(fn order -> order.distance_from_driver <= radius end)
+    rescue
+      error ->
+        Logger.error("Error getting available orders: #{inspect(error)}")
+        []
+    end
   end
 
-  defp count_available_orders(_driver_lat, _driver_lng, _radius) do
-    import Ecto.Query
+  defp count_available_orders(driver_lat, driver_lng, radius) do
+    try do
+      import Ecto.Query
 
-    from(o in Order,
-      where: o.status == "pending" and is_nil(o.driver_id),
-      select: count(o.id)
-    )
-    |> OjolMvp.Repo.one()
+      # Get all pending orders and filter by radius
+      orders =
+        from(o in Order,
+          where: o.status == "pending" and is_nil(o.driver_id),
+          select: %{id: o.id, pickup_lat: o.pickup_lat, pickup_lng: o.pickup_lng}
+        )
+        |> OjolMvp.Repo.all()
+        |> Enum.filter(fn order ->
+          distance =
+            case DistanceCalculator.haversine_distance(
+                   driver_lat,
+                   driver_lng,
+                   order.pickup_lat,
+                   order.pickup_lng
+                 ) do
+              {:ok, dist} -> dist
+              # nilai tinggi agar di-filter out
+              {:error, _} -> 999.0
+            end
+
+          distance <= radius
+        end)
+
+      length(orders)
+    rescue
+      error ->
+        Logger.error("Error counting available orders: #{inspect(error)}")
+        0
+    end
   end
 
-  defp calculate_distance(lat1, lon1, lat2, lon2) do
-    {lat1, _} = if is_binary(lat1), do: Float.parse(lat1), else: {lat1, ""}
-    {lon1, _} = if is_binary(lon1), do: Float.parse(lon1), else: {lon1, ""}
-    {lat2, _} = if is_binary(lat2), do: Float.parse(lat2), else: {lat2, ""}
-    {lon2, _} = if is_binary(lon2), do: Float.parse(lon2), else: {lon2, ""}
-
-    r = 6371
-    dlat = :math.pi() * (lat2 - lat1) / 180
-    dlon = :math.pi() * (lon2 - lon1) / 180
-
-    a =
-      :math.sin(dlat / 2) * :math.sin(dlat / 2) +
-        :math.cos(:math.pi() * lat1 / 180) * :math.cos(:math.pi() * lat2 / 180) *
-          :math.sin(dlon / 2) * :math.sin(dlon / 2)
-
-    c = 2 * :math.asin(:math.sqrt(a))
-
-    Float.round(r * c, 2)
-  end
-
+  # Validation functions
   defp validate_order_params(params) do
     required_fields = [
       "pickup_address",
@@ -553,7 +707,32 @@ defmodule OjolMvpWeb.OrderController do
   defp validate_location_params(params) do
     lat = params["lat"]
     lng = params["lng"]
-    radius = params["radius"] || 10.0
+    radius_param = params["radius"] || "10.0"
+
+    # Debug logging (hapus __struct__)
+    Logger.info("Raw params: #{inspect(params)}")
+    Logger.info("Radius param: #{inspect(radius_param)}")
+
+    # Parse radius
+    radius =
+      case radius_param do
+        nil ->
+          10.0
+
+        param when is_binary(param) ->
+          case Float.parse(param) do
+            {num, ""} -> num
+            _ -> 10.0
+          end
+
+        param when is_number(param) ->
+          param * 1.0
+
+        _ ->
+          10.0
+      end
+
+    Logger.info("Parsed radius: #{inspect(radius)}")
 
     cond do
       is_nil(lat) or is_nil(lng) ->
@@ -562,7 +741,9 @@ defmodule OjolMvpWeb.OrderController do
       !valid_coordinates?(lat, lng) ->
         {:error, "Invalid driver coordinates"}
 
-      !is_number(radius) or radius <= 0 or radius > 50 ->
+      radius <= 0 or radius > 50 ->
+        # Hapus __struct__
+        Logger.error("Radius validation failed: #{radius}")
         {:error, "Radius must be between 0 and 50 km"}
 
       true ->
@@ -570,6 +751,7 @@ defmodule OjolMvpWeb.OrderController do
     end
   end
 
+  # Authorization functions
   defp authorize_order_update(current_user, order) do
     cond do
       current_user.id != order.customer_id ->
@@ -580,6 +762,65 @@ defmodule OjolMvpWeb.OrderController do
 
       true ->
         :ok
+    end
+  end
+
+  # Enhanced order creation with routing and distance calculation
+  defp enhance_order_params(order_params, customer_id) do
+    try do
+      pickup_lat = DistanceCalculator.to_float(order_params["pickup_lat"])
+      pickup_lng = DistanceCalculator.to_float(order_params["pickup_lng"])
+      dest_lat = DistanceCalculator.to_float(order_params["destination_lat"])
+      dest_lng = DistanceCalculator.to_float(order_params["destination_lng"])
+
+      # Try OSRM first, fallback to Haversine
+      case RoutingService.get_route(pickup_lat, pickup_lng, dest_lat, dest_lng) do
+        {:ok, route_info} ->
+          case DistanceCalculator.calculate_price(route_info.distance_km) do
+            {:ok, price} ->
+              Map.merge(order_params, %{
+                "customer_id" => customer_id,
+                "distance_km" => route_info.distance_km,
+                "estimated_duration" => round(route_info.duration_min),
+                "total_fare" => price
+              })
+
+            {:error, _} ->
+              Map.merge(order_params, %{
+                "customer_id" => customer_id,
+                "distance_km" => route_info.distance_km,
+                "estimated_duration" => round(route_info.duration_min),
+                # fallback price
+                "total_fare" => 5000
+              })
+          end
+
+        {:error, _} ->
+          case DistanceCalculator.haversine_distance(pickup_lat, pickup_lng, dest_lat, dest_lng) do
+            {:ok, distance} ->
+              case DistanceCalculator.calculate_price(distance) do
+                {:ok, price} ->
+                  Map.merge(order_params, %{
+                    "customer_id" => customer_id,
+                    "distance_km" => distance,
+                    "total_fare" => price
+                  })
+
+                {:error, _} ->
+                  Map.merge(order_params, %{
+                    "customer_id" => customer_id,
+                    "distance_km" => distance,
+                    # fallback price
+                    "total_fare" => 5000
+                  })
+              end
+
+            {:error, _} ->
+              Map.put(order_params, "customer_id", customer_id)
+          end
+      end
+    rescue
+      _ -> Map.put(order_params, "customer_id", customer_id)
     end
   end
 
@@ -623,14 +864,26 @@ defmodule OjolMvpWeb.OrderController do
   end
 
   defp valid_coordinates?(lat, lng) do
-    with {:ok, lat_val} <- parse_float(lat),
-         {:ok, lng_val} <- parse_float(lng) do
-      lat_val >= -90.0 and lat_val <= 90.0 and lng_val >= -180.0 and lng_val <= 180.0
-    else
+    try do
+      case {DistanceCalculator.to_float(lat), DistanceCalculator.to_float(lng)} do
+        {lat_val, lng_val}
+        when lat_val >= -90.0 and lat_val <= 90.0 and
+               lng_val >= -180.0 and lng_val <= 180.0 ->
+          # Extra check: make sure it's not fallback 0.0 for clearly invalid input
+          not (lat_val == 0.0 and lng_val == 0.0 and
+                 is_binary(lat) and is_binary(lng) and
+                 String.trim(lat) not in ["0", "0.0"] and
+                 String.trim(lng) not in ["0", "0.0"])
+
+        _ ->
+          false
+      end
+    rescue
       _ -> false
     end
   end
 
+  # Response formatting functions
   defp format_order_response(order, current_user) do
     %{
       id: order.id,
@@ -642,10 +895,13 @@ defmodule OjolMvpWeb.OrderController do
       destination_lat: order.destination_lat,
       destination_lng: order.destination_lng,
       distance_km: order.distance_km,
-      price: order.price,
+      estimated_duration: order.estimated_duration,
+      price: safe_get_price(order),
+      total_fare: safe_get_price(order),
+      route_geometry: Map.get(order, :route_geometry),
       notes: order.notes,
-      customer: if(order.customer, do: format_user_info(order.customer), else: nil),
-      driver: if(order.driver, do: format_user_info(order.driver), else: nil),
+      customer: safe_format_user_info(order.customer),
+      driver: safe_format_user_info(order.driver),
       is_my_order: current_user.id == order.customer_id,
       is_assigned_to_me: current_user.id == order.driver_id,
       created_at: order.inserted_at,
@@ -663,26 +919,52 @@ defmodule OjolMvpWeb.OrderController do
       destination_lat: order.destination_lat,
       destination_lng: order.destination_lng,
       distance_km: order.distance_km,
-      price: order.price,
+      estimated_duration: order.estimated_duration,
+      price: safe_get_price(order),
+      total_fare: safe_get_price(order),
       distance_from_driver: Map.get(order, :distance_from_driver, 0.0),
-      customer: %{
-        name: order.customer.name,
-        phone: mask_phone(order.customer.phone)
-      },
+      customer: safe_format_customer_info(order.customer),
       created_at: order.inserted_at
     }
   end
 
-  defp format_user_info(user) do
-    %{
-      id: user.id,
-      name: user.name,
-      phone: user.phone,
-      type: user.type
-    }
+  defp safe_get_price(order) do
+    cond do
+      Map.has_key?(order, :total_fare) and not is_nil(order.total_fare) -> order.total_fare
+      Map.has_key?(order, :price) and not is_nil(order.price) -> order.price
+      true -> 0
+    end
   end
 
-  defp mask_phone(phone) do
+  defp safe_format_user_info(nil), do: nil
+
+  defp safe_format_user_info(user) do
+    try do
+      %{
+        id: user.id,
+        name: user.name,
+        phone: user.phone,
+        type: user.type
+      }
+    rescue
+      _ -> nil
+    end
+  end
+
+  defp safe_format_customer_info(nil), do: nil
+
+  defp safe_format_customer_info(user) do
+    try do
+      %{
+        name: user.name,
+        phone: mask_phone(user.phone)
+      }
+    rescue
+      _ -> nil
+    end
+  end
+
+  defp mask_phone(phone) when is_binary(phone) do
     if String.length(phone) > 6 do
       first_part = String.slice(phone, 0, 3)
       last_part = String.slice(phone, -3, 3)
@@ -692,15 +974,24 @@ defmodule OjolMvpWeb.OrderController do
     end
   end
 
+  defp mask_phone(_), do: "****"
+
   defp notify_order_cancellation(order) do
-    if order.driver_id do
-      OjolMvpWeb.Endpoint.broadcast("driver:#{order.driver_id}", "order_cancelled", %{
-        order_id: order.id,
-        message: "Customer has cancelled the order"
-      })
+    try do
+      if order.driver_id do
+        OjolMvpWeb.Endpoint.broadcast("driver:#{order.driver_id}", "order_cancelled", %{
+          order_id: order.id,
+          message: "Customer has cancelled the order"
+        })
+      end
+    rescue
+      error ->
+        Logger.error("Failed to notify cancellation: #{inspect(error)}")
+        :ok
     end
   end
 
+  # Utility functions
   defp parse_pagination_params(params) do
     page = params["page"] |> parse_positive_integer(1)
     limit = params["limit"] |> parse_positive_integer(10) |> min(50)
@@ -729,16 +1020,4 @@ defmodule OjolMvpWeb.OrderController do
   end
 
   defp parse_integer(_), do: :error
-
-  defp parse_float(value) when is_float(value), do: {:ok, value}
-  defp parse_float(value) when is_integer(value), do: {:ok, value * 1.0}
-
-  defp parse_float(value) when is_binary(value) do
-    case Float.parse(value) do
-      {float, ""} -> {:ok, float}
-      _ -> :error
-    end
-  end
-
-  defp parse_float(_), do: :error
 end

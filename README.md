@@ -1,29 +1,32 @@
-fatal: detected dubious ownership in repository at 'C:/Users/user/Documents/Project/farming/ojol/ojol_mvp'
-'C:/Users/user/Documents/Project/farming/ojol/ojol_mvp' is owned by:
-BUILTIN/Administrators (S-1-5-32-544)
-but the current user is:
-KHUNTUL/user (S-1-5-21-18827976-2608331803-1778774267-1001)
-To add an exception for this directory, call:
+# OjolMVP - Ride-hailing Application Backend
 
-        git config --global --add safe.directory C:/Users/user/Documents/Project/farming/ojol/ojol_mvp
+> A comprehensive backend system for ride-hailing applications built with Phoenix/Elixir
 
-PS C:\Users\user\Documents\Project\farming\ojol\ojol_mvp> git config --global --add safe.directory "C:/Users/user/Documents/Project/farming/ojol/ojol_mvp"
-PS C:\Users\user\Documents\Project\farming\ojol\ojol_mvp> git config --global --get-all safe.directory
+[![Phoenix](https://img.shields.io/badge/Phoenix-1.8.1-orange.svg)](https://phoenixframework.org/)
+[![Elixir](https://img.shields.io/badge/Elixir-1.18.2-purple.svg)](https://elixir-lang.org/)
+[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-12+-blue.svg)](https://postgresql.org/)
+[![WebSocket](https://img.shields.io/badge/WebSocket-Real--time-green.svg)](https://developer.mozilla.org/en-US/docs/Web/API/WebSockets_API)
 
-C:/Users/user/Documents/Project/farming/ojol/ojol_mvp
-PS C:\Ugit remote add origin https://github.com/DenkhulTech/denkhul_ojol.git
-PS C:\Users\user\Documents\Project\farming\ojol\ojol_mvp> git push -u origin main
-error: src refspec main does not match any
-error: failed to push some refs to 'https://github.com/DenkhulTech/denkhul_ojol.git'
-PS C:\Users\user\Documents\Project\farming\ojol\ojol_mvp> # OjolMVP - Ride-hailing Application Backend
+## 🚀 Overview
 
-## English
+OjolMVP provides a robust backend infrastructure for ride-hailing applications featuring real-time order management, intelligent driver-customer matching, live GPS tracking, and bidirectional communication through WebSocket channels.
 
-### Overview
+## 📋 Table of Contents
 
-OjolMVP is a comprehensive backend system for ride-hailing applications built with Phoenix/Elixir. The system provides real-time order management, driver-customer matching, live GPS tracking, and bidirectional communication through WebSocket channels.
+- [Features](#-features)
+- [Technology Stack](#-technology-stack)
+- [API Documentation](#-api-documentation)
+- [WebSocket Schema](#-websocket-schema)
+- [Database Schema](#-database-schema)
+- [Installation](#-installation)
+- [Configuration](#-configuration)
+- [Testing](#-testing)
+- [Deployment](#-deployment)
+- [Contributing](#-contributing)
 
-### Features
+## ✨ Features
+
+### Core Functionality
 
 - **Complete CRUD Operations** for users, orders, and ratings
 - **Real-time Communication** via Phoenix Channels/WebSocket
@@ -31,204 +34,563 @@ OjolMVP is a comprehensive backend system for ride-hailing applications built wi
 - **Order Broadcasting** to available drivers
 - **Rating System** for service quality feedback
 - **Driver-Customer Matching** with distance-based filtering
-- **Order Status Management** with complete workflow (pending → accepted → in_progress → completed)
+- **Order Status Management** with complete workflow
 
-### Technology Stack
-
-- **Backend Framework**: Phoenix 1.8.1
-- **Language**: Elixir 1.18.2
-- **Database**: PostgreSQL with Ecto ORM
-- **Real-time**: Phoenix Channels with WebSocket
-- **JSON Serialization**: Custom Decimal handling
-- **Testing**: Built-in ExUnit framework
-
-### Database Schema
-
-#### Users Table
-
-```sql
-- id (UUID, Primary Key)
-- name (String)
-- phone (String, Unique)
-- type (String) -- 'customer' or 'driver'
-- latitude/longitude (Decimal)
-- is_available (Boolean)
-- average_rating (Decimal)
-- total_ratings (Integer)
-```
-
-#### Orders Table
-
-```sql
-- id (UUID, Primary Key)
-- pickup_address/coordinates (String/Decimal)
-- destination_address/coordinates (String/Decimal)
-- distance_km (Decimal)
-- price (Integer)
-- status (String) -- 'pending', 'accepted', 'in_progress', 'completed'
-- customer_id/driver_id (Foreign Keys)
-```
-
-#### Ratings Table
-
-```sql
-- id (UUID, Primary Key)
-- rating (Integer, 1-5 scale)
-- comment (Text)
-- reviewer_type (String) -- 'customer' or 'driver'
-- order_id/reviewer_id/reviewee_id (Foreign Keys)
-```
-
-### API Endpoints
-
-#### Standard CRUD
+### Order Workflow
 
 ```
-GET    /api/users          # List users
-POST   /api/users          # Create user
-GET    /api/users/:id      # Get user
+pending → accepted → in_progress → completed
+```
+
+### User Types
+
+- **Customers**: Request rides, track orders, rate drivers
+- **Drivers**: Receive orders, update location, manage trips
+
+## 🛠 Technology Stack
+
+| Component              | Technology                      |
+| ---------------------- | ------------------------------- |
+| **Backend Framework**  | Phoenix 1.8.1                   |
+| **Language**           | Elixir 1.18.2                   |
+| **Database**           | PostgreSQL with Ecto ORM        |
+| **Real-time**          | Phoenix Channels with WebSocket |
+| **JSON Serialization** | Custom Decimal handling         |
+| **Testing**            | Built-in ExUnit framework       |
+
+## 📖 API Documentation
+
+### 🌐 Swagger UI
+
+Interactive API documentation is available at:
+**[https://apijol.denkhultech.com/docs/ui](https://apijol.denkhultech.com/docs/ui)**
+
+### Base URL
+
+```
+Production: https://apijol.denkhultech.com
+Development: http://localhost:4000
+```
+
+### Standard CRUD Endpoints
+
+#### Users Management
+
+```http
+GET    /api/users          # List all users
+POST   /api/users          # Create new user
+GET    /api/users/:id      # Get user by ID
 PUT    /api/users/:id      # Update user
 DELETE /api/users/:id      # Delete user
+```
 
-GET    /api/orders         # List orders
-POST   /api/orders         # Create order
-GET    /api/orders/:id     # Get order
+#### Orders Management
+
+```http
+GET    /api/orders         # List all orders
+POST   /api/orders         # Create new order
+GET    /api/orders/:id     # Get order by ID
 PUT    /api/orders/:id     # Update order
 DELETE /api/orders/:id     # Delete order
-
-GET    /api/ratings        # List ratings
-POST   /api/ratings        # Create rating
 ```
 
-#### Custom Endpoints
+#### Ratings Management
 
+```http
+GET    /api/ratings        # List all ratings
+POST   /api/ratings        # Create new rating
 ```
-GET  /api/orders/available           # Available orders for drivers
+
+### Custom Ride-hailing Endpoints
+
+#### Driver Operations
+
+```http
+GET  /api/orders/available           # Get available orders for drivers
 PUT  /api/orders/:id/accept          # Driver accepts order
 PUT  /api/orders/:id/start           # Start trip
 PUT  /api/orders/:id/complete        # Complete trip
 PUT  /api/users/:id/location         # Update driver location
 ```
 
-### WebSocket Channels
+### Example API Requests
 
-#### Connection
+#### Create New Order
+
+```json
+POST /api/orders
+{
+  "pickup_address": "Jl. Sudirman No. 1, Jakarta",
+  "pickup_latitude": -6.208763,
+  "pickup_longitude": 106.845599,
+  "destination_address": "Mall Taman Anggrek, Jakarta",
+  "destination_latitude": -6.178306,
+  "destination_longitude": 106.791992,
+  "customer_id": "123e4567-e89b-12d3-a456-426614174000"
+}
+```
+
+#### Update Driver Location
+
+```json
+PUT /api/users/:id/location
+{
+  "latitude": -6.200000,
+  "longitude": 106.816666
+}
+```
+
+## 🔌 WebSocket Schema
+
+### Connection Setup
+
+#### WebSocket URL
+
+```
+Production:  wss://apijol.denkhultech.com/socket/websocket
+Development: ws://localhost:4000/socket/websocket
+structuc url : ws://localhost:4000/socket/websocket?token=eyJhbGciOiJIUzUxMiIsInR5cCI6IkpXVCJ9.eyJhdWQiOiJvam9sX212cCIsImV4cCI6MTc2MDk3MzQ1NiwiaWF0IjoxNzU4NTU0MjU2LCJpc3MiOiJvam9sX212cCIsImp0aSI6IjZhMzc2MjY1LTc0ZTgtNDcwZS05NWYxLTJiMDViOTZjMzNkOCIsIm5iZiI6MTc1ODU1NDI1NSwic3ViIjoiMSIsInR5cCI6ImFjY2VzcyIsInR5cGUiOiJkcml2ZXIifQ.PLIXhc1ZZW5LwhuQtwUScUM2EZ8bIL3lUuW8zIOeI_0ubH0qPD8Y7KH1-38Vh0Kr84cljMZTe5HBhAEpnASZrg&user_id=1&vsn=2.0.0
+```
+
+#### Connection Parameters
 
 ```javascript
-WebSocket URL: ws://localhost:4000/socket/websocket
-Parameters: user_id, user_type, vsn=2.0.0
+const params = {
+  token: JWT,
+  user_id: 1
+  vsn: "2.0.0"
+};
 ```
 
-#### Available Channels
-
-```
-driver:available    # Broadcast new orders to drivers
-order:{order_id}    # Real-time updates for specific order
-```
-
-#### Message Format
+#### JavaScript Connection Example
 
 ```javascript
-// Array format: [join_ref, message_ref, topic, event, payload]
-["1", "1", "driver:available", "phx_join", {}];
+import { Socket } from "phoenix";
+
+const socket = new Socket("ws://localhost:4000/socket", {
+  params: {
+    user_id: currentUserId,
+    user_type: userType,
+    vsn: "2.0.0",
+  },
+});
+
+socket.connect();
 ```
 
-### Installation & Setup
+### Available Channels
 
-#### Prerequisites
+#### 1. Driver Available Channel
+
+**Channel:** `driver:available`
+**Purpose:** Broadcast new orders to available drivers
+
+```javascript
+// Join channel
+const driverChannel = socket.channel("driver:available", {});
+driverChannel
+  .join()
+  .receive("ok", (resp) => console.log("Joined driver channel", resp))
+  .receive("error", (resp) => console.log("Unable to join", resp));
+
+// Listen for new orders
+driverChannel.on("new_order", (payload) => {
+  console.log("New order received:", payload);
+  // Handle new order notification
+});
+```
+
+#### 2. Order Specific Channel
+
+**Channel:** `order:{order_id}`
+**Purpose:** Real-time updates for specific order
+
+```javascript
+// Join specific order channel
+const orderChannel = socket.channel(`order:${orderId}`, {});
+orderChannel
+  .join()
+  .receive("ok", (resp) => console.log("Joined order channel", resp))
+  .receive("error", (resp) => console.log("Unable to join", resp));
+
+// Listen for order updates
+orderChannel.on("status_update", (payload) => {
+  console.log("Order status updated:", payload);
+});
+
+orderChannel.on("location_update", (payload) => {
+  console.log("Driver location updated:", payload);
+});
+```
+
+### Message Format
+
+WebSocket messages follow Phoenix Channel protocol:
+
+```javascript
+// Format: [join_ref, message_ref, topic, event, payload]
+["1", "1", "driver:available", "phx_join", {}][
+  ("1", "2", "order:123", "status_update", { status: "accepted" })
+];
+```
+
+### Event Types
+
+#### Driver Available Channel Events
+
+- `new_order`: New order broadcast to drivers
+- `order_cancelled`: Order cancellation notification
+
+#### Order Channel Events
+
+- `status_update`: Order status changes
+- `location_update`: Real-time driver location
+- `driver_assigned`: Driver acceptance notification
+- `trip_started`: Trip initiation
+- `trip_completed`: Trip completion
+
+### WebSocket Event Payloads
+
+#### New Order Event
+
+```json
+{
+  "event": "new_order",
+  "payload": {
+    "order_id": "123e4567-e89b-12d3-a456-426614174000",
+    "pickup_address": "Jl. Sudirman No. 1",
+    "destination_address": "Mall Taman Anggrek",
+    "distance_km": 5.2,
+    "price": 25000,
+    "customer": {
+      "id": "456e7890-e89b-12d3-a456-426614174001",
+      "name": "John Doe",
+      "phone": "+6281234567890"
+    }
+  }
+}
+```
+
+#### Location Update Event
+
+```json
+{
+  "event": "location_update",
+  "payload": {
+    "driver_id": "789e0123-e89b-12d3-a456-426614174002",
+    "latitude": -6.2,
+    "longitude": 106.816666,
+    "timestamp": "2025-01-15T10:30:00Z"
+  }
+}
+```
+
+## 🗄 Database Schema
+
+### Users Table
+
+```sql
+CREATE TABLE users (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  name VARCHAR(255) NOT NULL,
+  phone VARCHAR(20) UNIQUE NOT NULL,
+  type VARCHAR(20) NOT NULL CHECK (type IN ('customer', 'driver')),
+  latitude DECIMAL(10, 8),
+  longitude DECIMAL(11, 8),
+  is_available BOOLEAN DEFAULT true,
+  average_rating DECIMAL(3, 2) DEFAULT 0.0,
+  total_ratings INTEGER DEFAULT 0,
+  inserted_at TIMESTAMP NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+);
+```
+
+### Orders Table
+
+```sql
+CREATE TABLE orders (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  pickup_address TEXT NOT NULL,
+  pickup_latitude DECIMAL(10, 8) NOT NULL,
+  pickup_longitude DECIMAL(11, 8) NOT NULL,
+  destination_address TEXT NOT NULL,
+  destination_latitude DECIMAL(10, 8) NOT NULL,
+  destination_longitude DECIMAL(11, 8) NOT NULL,
+  distance_km DECIMAL(8, 2),
+  price INTEGER NOT NULL,
+  status VARCHAR(20) DEFAULT 'pending' CHECK (status IN ('pending', 'accepted', 'in_progress', 'completed', 'cancelled')),
+  customer_id UUID REFERENCES users(id),
+  driver_id UUID REFERENCES users(id),
+  inserted_at TIMESTAMP NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+);
+```
+
+### Ratings Table
+
+```sql
+CREATE TABLE ratings (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  rating INTEGER NOT NULL CHECK (rating >= 1 AND rating <= 5),
+  comment TEXT,
+  reviewer_type VARCHAR(20) NOT NULL CHECK (reviewer_type IN ('customer', 'driver')),
+  order_id UUID REFERENCES orders(id),
+  reviewer_id UUID REFERENCES users(id),
+  reviewee_id UUID REFERENCES users(id),
+  inserted_at TIMESTAMP NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+);
+```
+
+## 🚀 Installation
+
+### Prerequisites
 
 - Elixir 1.18+ and Erlang/OTP 27
 - PostgreSQL 12+
 - Phoenix 1.8+
+- Git
 
-#### Installation Steps
+### Step-by-Step Installation
+
+#### 1. Clone Repository
 
 ```bash
-# Clone repository
-git clone <repository-url>
+git clone https://github.com/DenkhulTech/denkhul_ojol.git
 cd ojol_mvp
+```
 
-# Install dependencies
+#### 2. Install Dependencies
+
+```bash
 mix deps.get
+```
 
-# Configure database in config/dev.exs
-# Create and migrate database
+#### 3. Setup Database
+
+```bash
+# Create database
 mix ecto.create
+
+# Run migrations
 mix ecto.migrate
 
-# Start Phoenix server
+# Optional: Seed data
+mix run priv/repo/seeds.exs
+```
+
+#### 4. Start Development Server
+
+```bash
 mix phx.server
 ```
 
-#### Environment Configuration
+The application will be available at `http://localhost:4000`
+
+## ⚙️ Configuration
+
+### Database Configuration
+
+Edit `config/dev.exs`:
 
 ```elixir
-# config/dev.exs
 config :ojol_mvp, OjolMvp.Repo,
   username: "postgres",
   password: "your_password",
   hostname: "localhost",
-  database: "ojol_mvp_dev"
+  database: "ojol_mvp_dev",
+  show_sensitive_data_on_connection_error: true,
+  pool_size: 10
 ```
 
-### Testing
+### Production Configuration
 
-#### Run Tests
+Edit `config/prod.exs`:
+
+```elixir
+config :ojol_mvp, OjolMvp.Repo,
+  url: System.get_env("DATABASE_URL"),
+  pool_size: String.to_integer(System.get_env("POOL_SIZE") || "10"),
+  ssl: true
+```
+
+### Environment Variables
+
+Create `.env` file:
 
 ```bash
-mix test                    # Run all tests
-mix test --cover           # Run with coverage report
+DATABASE_URL=postgresql://username:password@localhost/ojol_mvp_prod
+SECRET_KEY_BASE=your_secret_key_base_here
+PHX_HOST=apijol.denkhultech.com
+PORT=4000
 ```
 
-#### WebSocket Testing
+## 🧪 Testing
 
-Use WebSocket client tools or browser console to test real-time features.
+### Run All Tests
 
-### Deployment Status
+```bash
+mix test
+```
 
-#### ✅ Completed (90%)
+### Run with Coverage
+
+```bash
+mix test --cover
+```
+
+### Run Specific Test Files
+
+```bash
+mix test test/ojol_mvp_web/controllers/user_controller_test.exs
+```
+
+### WebSocket Testing
+
+Use WebSocket testing tools like:
+
+- Browser Developer Console
+- Postman WebSocket
+- wscat CLI tool
+
+Example with wscat:
+
+```bash
+wscat -c ws://localhost:4000/socket/websocket?user_id=123&user_type=driver&vsn=2.0.0
+```
+
+## 🚀 Deployment
+
+### Production Deployment Status
+
+#### ✅ Completed Features (90%)
 
 - Database schema and migrations
 - Complete CRUD API operations
 - Custom ride-hailing endpoints
 - Real-time WebSocket communication
 - Order broadcasting system
-- Location tracking
+- Location tracking functionality
 - Rating and feedback system
+- Basic error handling
+- API documentation
 
-#### ❌ Production Enhancements Needed
+#### 🚧 Production Enhancements Needed
 
-- Authentication and authorization
-- Input validation improvements
-- OpenStreetMap integration
-- Distance calculation algorithms
-- Advanced driver matching with radius filtering
-- Error handling standardization
-- Rate limiting and security measures
+- Authentication and authorization (JWT/OAuth)
+- Advanced input validation and sanitization
+- OpenStreetMap integration for routing
+- Sophisticated distance calculation algorithms
+- Enhanced driver matching with configurable radius
+- Comprehensive error handling and logging
+- Rate limiting and DDoS protection
+- API versioning strategy
+- Performance monitoring and metrics
+- Automated testing pipeline
+- Docker containerization
+- Load balancing configuration
 
-### Contributing
+### Deployment Steps
 
-1. Fork the repository
-2. Create feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit changes (`git commit -m 'Add amazing feature'`)
-4. Push to branch (`git push origin feature/amazing-feature`)
-5. Open Pull Request
+#### 1. Build Release
 
-### License
+```bash
+mix deps.get --only prod
+MIX_ENV=prod mix compile
+MIX_ENV=prod mix assets.deploy
+MIX_ENV=prod mix release
+```
 
-This project is licensed under the MIT License.
+#### 2. Database Migration
+
+```bash
+MIX_ENV=prod mix ecto.migrate
+```
+
+#### 3. Start Production Server
+
+```bash
+MIX_ENV=prod mix phx.server
+```
+
+## 🤝 Contributing
+
+### Development Workflow
+
+1. **Fork the repository**
+
+   ```bash
+   git fork https://github.com/DenkhulTech/denkhul_ojol.git
+   ```
+
+2. **Create feature branch**
+
+   ```bash
+   git checkout -b feature/amazing-feature
+   ```
+
+3. **Make your changes**
+
+   ```bash
+   # Write code
+   # Add tests
+   # Update documentation
+   ```
+
+4. **Run tests**
+
+   ```bash
+   mix test
+   mix credo --strict
+   mix format --check-formatted
+   ```
+
+5. **Commit changes**
+
+   ```bash
+   git commit -m 'feat: add amazing feature'
+   ```
+
+6. **Push to branch**
+
+   ```bash
+   git push origin feature/amazing-feature
+   ```
+
+7. **Create Pull Request**
+   - Use clear, descriptive title
+   - Include detailed description
+   - Reference related issues
+   - Add screenshots if applicable
+
+### Code Standards
+
+- Follow Elixir style guidelines
+- Write comprehensive tests
+- Update documentation
+- Use conventional commit messages
+
+## 📞 Support
+
+- **Documentation**: [API Docs](https://apijol.denkhultech.com/docs/ui)
+- **Issues**: [GitHub Issues](https://github.com/DenkhulTech/denkhul_ojol/issues)
+- **Email**: support@denkhultech.com
+
+## 📄 License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
 ---
 
-## Bahasa Indonesia
+## 🌏 Bahasa Indonesia
 
 ### Gambaran Umum
 
-OjolMVP adalah sistem backend komprehensif untuk aplikasi ride-hailing yang dibangun dengan Phoenix/Elixir. Sistem ini menyediakan manajemen pesanan real-time, pencocokan driver-customer, pelacakan GPS langsung, dan komunikasi dua arah melalui WebSocket channels.
+OjolMVP adalah sistem backend komprehensif untuk aplikasi ride-hailing yang dibangun dengan Phoenix/Elixir. Sistem ini menyediakan manajemen pesanan real-time, pencocokan driver-customer yang cerdas, pelacakan GPS langsung, dan komunikasi dua arah melalui WebSocket channels.
 
 ### Fitur Utama
 
-- **Operasi CRUD Lengkap** untuk users, orders, dan ratings
+- **Operasi CRUD Lengkap** untuk pengguna, pesanan, dan rating
 - **Komunikasi Real-time** via Phoenix Channels/WebSocket
 - **Pelacakan GPS Langsung** dan update lokasi
 - **Broadcast Pesanan** ke driver yang tersedia
@@ -236,78 +598,36 @@ OjolMVP adalah sistem backend komprehensif untuk aplikasi ride-hailing yang diba
 - **Pencocokan Driver-Customer** dengan filter berbasis jarak
 - **Manajemen Status Pesanan** dengan workflow lengkap
 
-### Teknologi yang Digunakan
+### Dokumentasi API
 
-- **Framework Backend**: Phoenix 1.8.1
-- **Bahasa**: Elixir 1.18.2
-- **Database**: PostgreSQL dengan Ecto ORM
-- **Real-time**: Phoenix Channels dengan WebSocket
-- **Serialisasi JSON**: Custom Decimal handling
+Dokumentasi interaktif tersedia di:
+**[https://apijol.denkhultech.com/docs/ui](https://apijol.denkhultech.com/docs/ui)**
 
-### Instalasi & Konfigurasi
-
-#### Prasyarat
-
-- Elixir 1.18+ dan Erlang/OTP 27
-- PostgreSQL 12+
-- Phoenix 1.8+
-
-#### Langkah Instalasi
+### Instalasi Cepat
 
 ```bash
 # Clone repository
-git clone <repository-url>
+git clone https://github.com/DenkhulTech/denkhul_ojol.git
 cd ojol_mvp
 
 # Install dependencies
 mix deps.get
 
-# Konfigurasi database di config/dev.exs
-# Buat dan migrate database
-mix ecto.create
-mix ecto.migrate
+# Setup database
+mix ecto.create && mix ecto.migrate
 
-# Jalankan Phoenix server
+# Jalankan server
 mix phx.server
-```
-
-### Status Pengembangan
-
-#### ✅ Selesai (90%)
-
-- Skema database dan migrasi
-- Operasi CRUD API lengkap
-- Endpoint khusus ride-hailing
-- Komunikasi WebSocket real-time
-- Sistem broadcast pesanan
-- Pelacakan lokasi
-- Sistem rating dan feedback
-
-#### ❌ Peningkatan untuk Produksi
-
-- Sistem authentication dan authorization
-- Perbaikan validasi input
-- Integrasi OpenStreetMap
-- Algoritma perhitungan jarak
-- Pencocokan driver lanjutan dengan filter radius
-- Standardisasi error handling
-- Rate limiting dan keamanan
-
-### Pengujian
-
-```bash
-mix test                    # Jalankan semua test
-mix test --cover           # Jalankan dengan laporan coverage
 ```
 
 ### Kontribusi
 
-1. Fork repository
+1. Fork repository ini
 2. Buat branch fitur (`git checkout -b feature/fitur-menakjubkan`)
-3. Commit perubahan (`git commit -m 'Tambah fitur menakjubkan'`)
+3. Commit perubahan (`git commit -m 'feat: tambah fitur menakjubkan'`)
 4. Push ke branch (`git push origin feature/fitur-menakjubkan`)
 5. Buat Pull Request
 
-### Lisensi
+---
 
-Proyek ini dilisensikan di bawah MIT License.
+**Made with ❤️ by [DenkhulTech](https://denkhultech.com)**

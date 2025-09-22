@@ -109,7 +109,8 @@ defmodule OjolMvp.Orders do
 
   def get_active_order_for_driver(driver_id) do
     from(o in Order,
-      where: o.driver_id == ^driver_id and o.status in ["accepted", "in_progress"],
+      where: o.driver_id == ^driver_id and o.status in ["accepted", "pickup", "in_progress"],
+      # Tambah "pickup" status
       limit: 1
     )
     |> Repo.one()
@@ -182,6 +183,23 @@ defmodule OjolMvp.Orders do
 
       {:error, _} ->
         attrs
+    end
+  end
+
+  def update_order_status(order_id, status) do
+    try do
+      order = get_order!(order_id)
+      update_order(order, %{status: status})
+    rescue
+      Ecto.NoResultsError -> {:error, :not_found}
+    end
+  end
+
+  # Di lib/ojol_mvp/orders.ex - tambahkan function ini:
+  def get_order(id) do
+    case Repo.get(Order, id) do
+      nil -> {:error, :not_found}
+      order -> {:ok, order}
     end
   end
 end

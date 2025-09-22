@@ -51,6 +51,11 @@ config :logger, :default_formatter,
   format: "$time $metadata[$level] $message\n",
   metadata: [:request_id]
 
+config :ojol_mvp, :routing,
+  # Public server
+  osrm_base_url: "https://router.project-osrm.org",
+  timeout: 15_000
+
 # Use Jason for JSON parsing in Phoenix
 config :phoenix, :json_library, Jason
 

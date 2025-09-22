@@ -5,13 +5,10 @@ defmodule OjolMvpWeb.AuthController do
   def register(conn, %{"user" => user_params}) do
     case Accounts.create_user(user_params) do
       {:ok, user} ->
-        {:ok, token, _claims} = Guardian.encode_and_sign(user)
-
         conn
         |> put_status(:created)
         |> json(%{
           message: "User created successfully",
-          token: token,
           user: %{
             id: user.id,
             name: user.name,
@@ -30,7 +27,7 @@ defmodule OjolMvpWeb.AuthController do
   def login(conn, %{"phone" => phone, "password" => password}) do
     case Accounts.authenticate_user(phone, password) do
       {:ok, user} ->
-        {:ok, token, _claims} = Guardian.encode_and_sign(user)
+        {:ok, token, _claims} = Guardian.encode_and_sign(user, %{"type" => user.type})
 
         json(conn, %{
           message: "Login successful",
@@ -53,7 +50,7 @@ defmodule OjolMvpWeb.AuthController do
 
   def refresh(conn, _params) do
     user = Guardian.Plug.current_resource(conn)
-    {:ok, new_token, _claims} = Guardian.encode_and_sign(user)
+    {:ok, new_token, _claims} = Guardian.encode_and_sign(user, %{"type" => user.type})
 
     json(conn, %{token: new_token})
   end

@@ -1,5 +1,6 @@
 defmodule OjolMvp.Maps.RoutingService do
-  @osrm_base_url "http://router.project-osrm.org"
+  @config Application.compile_env(:ojol_mvp, :routing, %{})
+  @osrm_base_url @config[:osrm_base_url] || "https://router.project-osrm.org"
 
   @doc """
   Get route information from OpenStreetMap OSRM service

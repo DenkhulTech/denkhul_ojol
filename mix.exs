@@ -73,7 +73,7 @@ defmodule OjolMvp.MixProject do
       {:httpoison, "~> 2.0"},
       {:open_api_spex, "~> 3.5"},
       {:phoenix_swagger, "~> 0.8"},
-       {:corsica, "~> 2.1"}
+      {:corsica, "~> 2.1"}
     ]
   end
 

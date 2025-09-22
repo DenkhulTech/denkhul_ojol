@@ -3,50 +3,73 @@ defmodule OjolMvpWeb.DriverChannel do
 
   @impl true
   def join("driver:available", _payload, socket) do
-    if socket.assigns.user.type == "driver" do
-      {:ok, socket}
-    else
-      {:error, %{reason: "drivers_only"}}
+    try do
+      if socket.assigns.user.type == "driver" do
+        {:ok, socket}
+      else
+        {:error, %{reason: "drivers_only"}}
+      end
+    rescue
+      _ -> {:error, %{reason: "internal_error"}}
     end
   end
 
   @impl true
   def join("driver:" <> driver_id, _payload, socket) do
-    if socket.assigns.user.id == String.to_integer(driver_id) do
-      {:ok, socket}
-    else
-      {:error, %{reason: "unauthorized"}}
+    try do
+      case Integer.parse(driver_id) do
+        {id, ""} ->
+          if socket.assigns.user.id == id do
+            {:ok, socket}
+          else
+            {:error, %{reason: "unauthorized"}}
+          end
+
+        _ ->
+          {:error, %{reason: "invalid_driver_id"}}
+      end
+    rescue
+      _ -> {:error, %{reason: "internal_error"}}
     end
   end
 
   @impl true
   def handle_in("location_update", %{"lat" => lat, "lng" => lng}, socket) do
-    OjolMvp.Accounts.update_user_location(socket.assigns.user.id, lat, lng)
-    broadcast_driver_location(socket.assigns.user.id, lat, lng)
-    {:noreply, socket}
+    try do
+      OjolMvp.Accounts.update_user_location(socket.assigns.user.id, lat, lng)
+      broadcast_driver_location(socket.assigns.user.id, lat, lng)
+      {:noreply, socket}
+    rescue
+      _ -> {:noreply, socket}
+    end
   end
 
   @impl true
   def handle_in("availability_update", %{"is_available" => available}, socket) do
-    # Update driver availability
-    user = OjolMvp.Accounts.get_user!(socket.assigns.user_id)
-    OjolMvp.Accounts.update_user(user, %{is_available: available})
-
-    {:noreply, socket}
+    try do
+      user = socket.assigns.user
+      OjolMvp.Accounts.update_user(user, %{is_available: available})
+      {:noreply, socket}
+    rescue
+      _ -> {:noreply, socket}
+    end
   end
 
   defp broadcast_driver_location(driver_id, lat, lng) do
-    # Find active orders for this driver
-    case OjolMvp.Orders.get_active_order_for_driver(driver_id) do
-      nil ->
-        :ok
+    try do
+      case OjolMvp.Orders.get_active_order_for_driver(driver_id) do
+        nil ->
+          :ok
 
-      order ->
-        OjolMvpWeb.Endpoint.broadcast("order:#{order.id}", "driver_location_update", %{
-          latitude: lat,
-          longitude: lng,
-          timestamp: DateTime.utc_now()
-        })
+        order ->
+          OjolMvpWeb.Endpoint.broadcast("order:#{order.id}", "driver_location_update", %{
+            latitude: lat,
+            longitude: lng,
+            timestamp: DateTime.utc_now()
+          })
+      end
+    rescue
+      _ -> :ok
     end
   end
 end

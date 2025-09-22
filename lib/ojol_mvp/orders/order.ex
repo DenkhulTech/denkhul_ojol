@@ -13,7 +13,13 @@ defmodule OjolMvp.Orders.Order do
     field :destination_lat, :decimal
     field :destination_lng, :decimal
     field :distance_km, :decimal
+    # TAMBAH - untuk durasi dalam menit
+    field :estimated_duration, :integer
     field :price, :integer
+    # TAMBAH - untuk konsistensi
+    field :total_fare, :integer
+    # TAMBAH - untuk OSRM route data
+    field :route_geometry, :map
     field :status, :string, default: "pending"
     field :notes, :string
 
@@ -36,7 +42,13 @@ defmodule OjolMvp.Orders.Order do
       :destination_lat,
       :destination_lng,
       :distance_km,
+      # TAMBAH
+      :estimated_duration,
       :price,
+      # TAMBAH
+      :total_fare,
+      # TAMBAH
+      :route_geometry,
       :status,
       :notes,
       :customer_id,
@@ -49,8 +61,7 @@ defmodule OjolMvp.Orders.Order do
       :destination_address,
       :destination_lat,
       :destination_lng,
-      :price,
-      :status
+      :customer_id
     ])
     |> validate_length(:pickup_address, min: 5, max: 255)
     |> validate_length(:destination_address, min: 5, max: 255)
@@ -63,10 +74,14 @@ defmodule OjolMvp.Orders.Order do
       less_than_or_equal_to: 180
     )
     |> validate_number(:distance_km, greater_than: 0, less_than: 1000)
+    # max 24 jam
+    |> validate_number(:estimated_duration, greater_than: 0, less_than: 1440)
     |> validate_number(:price, greater_than: 0, less_than: 10_000_000)
+    |> validate_number(:total_fare, greater_than: 0, less_than: 10_000_000)
     |> validate_inclusion(:status, [
       "pending",
       "accepted",
+      "pickup",
       "in_progress",
       "completed",
       "cancelled"
@@ -74,6 +89,19 @@ defmodule OjolMvp.Orders.Order do
     |> foreign_key_constraint(:customer_id)
     |> foreign_key_constraint(:driver_id)
     |> validate_coordinates_different()
+    |> set_default_fare()
+  end
+
+  # Auto-set total_fare jika tidak ada
+  defp set_default_fare(changeset) do
+    price = get_change(changeset, :price)
+    total_fare = get_change(changeset, :total_fare)
+
+    cond do
+      total_fare -> changeset
+      price -> put_change(changeset, :total_fare, price)
+      true -> changeset
+    end
   end
 
   defp validate_coordinates_different(changeset) do

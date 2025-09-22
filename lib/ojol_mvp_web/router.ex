@@ -32,14 +32,11 @@ defmodule OjolMvpWeb.Router do
     pipe_through :browser
     live_dashboard "/dashboard", metrics: OjolMvpWeb.Telemetry
     get "/", PageController, :home
+      get "/docs", ApiDocsController, :index
+    get "/docs/ui", ApiDocsController, :swagger_ui
   end
 
-  scope "/api-docs", OjolMvpWeb do
-    pipe_through :api
 
-    get "/", ApiDocsController, :ui
-    get "/spec.json", ApiDocsController, :index
-  end
 
   # Public API routes (with rate limiting)
   scope "/api", OjolMvpWeb do
@@ -85,6 +82,8 @@ defmodule OjolMvpWeb.Router do
     put "/users/:id/location", UserController, :update_location
 
     # Order routes (protected)
+    # Available orders for drivers
+    get "/orders/available", OrderController, :available_orders
     # Get user's orders
     get "/orders", OrderController, :my_orders
     # Create new order (customers only)
@@ -97,8 +96,7 @@ defmodule OjolMvpWeb.Router do
     delete "/orders/:id", OrderController, :delete
 
     # Driver-specific order routes
-    # Available orders for drivers
-    get "/orders/available", OrderController, :available_orders
+
     # Accept order (drivers only)
     put "/orders/:id/accept", OrderController, :accept
     # Start trip (assigned driver only)
